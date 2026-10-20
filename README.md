@@ -18,23 +18,23 @@
 
 ## 五分钟运行
 
-Python 3.10+，先安装适合设备的 PyTorch。CPU 示例：
+先安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)。项目默认使用 Python 3.12，
+仍兼容 Python 3.10+；uv 会创建环境并按 `uv.lock` 安装 CPU 依赖：
 
 ```bash
 git clone https://github.com/pjgao/mini-deepinfer.git
 cd mini-deepinfer
-python -m venv .venv
-source .venv/bin/activate  # Windows PowerShell: .venv\Scripts\Activate.ps1
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install -e ".[dev]"
+uv sync --locked
 
-mini-deepinfer --device cpu --max-tokens 8
-python examples/trace_scheduler.py
-python -m pytest -q
+uv run mini-deepinfer --device cpu --max-tokens 8
+uv run python examples/trace_scheduler.py
+uv run pytest -q
 ```
 
 默认输出包括生成 token ID、文本和计数。随机模型的文本没有语义；**能生成 token 不是模型质量证明**。
 Windows 原生 PyTorch 若出现 DLL 环境问题，可在 WSL2 中执行相同命令。
+无需手动激活虚拟环境。依赖更新、Python 版本选择及 CUDA/NPU 环境见
+[uv 环境说明](docs/environment.md)。
 
 ```python
 from mini_deepinfer import LLM, SamplingParams
@@ -85,9 +85,9 @@ flowchart LR
 下面只拟合仓库内的一小段合成文本，适合观察损失、缓存与推测接受率，不能用于评价语言能力：
 
 ```bash
-python examples/train_tiny.py --steps 160 --output checkpoints/tiny
-mini-deepinfer --checkpoint checkpoints/tiny --prompt "A KV cache" --max-tokens 40
-mini-deepinfer --checkpoint checkpoints/tiny --prompt "A KV cache" --max-tokens 40 --draft-tokens 3
+uv run python examples/train_tiny.py --steps 160 --output checkpoints/tiny
+uv run mini-deepinfer --checkpoint checkpoints/tiny --prompt "A KV cache" --max-tokens 40
+uv run mini-deepinfer --checkpoint checkpoints/tiny --prompt "A KV cache" --max-tokens 40 --draft-tokens 3
 ```
 
 训练示例默认关闭稀疏选择：硬 Top-K 的索引不会自动获得有效训练梯度。本项目没有实现
@@ -96,8 +96,8 @@ DeepSeek 的 indexer 训练目标。默认随机模型仍可用于验证稀疏�
 ## 性能实验的正确口径
 
 ```bash
-python examples/benchmark.py --checkpoint checkpoints/tiny --output runs/baseline.json
-python examples/benchmark.py --checkpoint checkpoints/tiny --draft-tokens 3 --output runs/spec.json
+uv run python examples/benchmark.py --checkpoint checkpoints/tiny --output runs/baseline.json
+uv run python examples/benchmark.py --checkpoint checkpoints/tiny --draft-tokens 3 --output runs/spec.json
 ```
 
 统计的是**实际发出的 token 数 / 总时间**，包括 prefill、调度与采样；设备计时前后显式同步，
@@ -122,21 +122,22 @@ python examples/benchmark.py --checkpoint checkpoints/tiny --draft-tokens 3 --ou
 在已有匹配的 `torch`、`torch_npu`、驱动和 CANN 环境中：
 
 ```bash
-python -m pip install -e . --no-deps
+uv pip install --python /path/to/npu-env/bin/python -e . --no-deps
 # 先确认设备归属和空闲情况；示例中的 0 是已获准使用的可见设备。
-ASCEND_RT_VISIBLE_DEVICES=0 python examples/validate_device.py --device npu:0 --output runs/npu.json
+ASCEND_RT_VISIBLE_DEVICES=0 /path/to/npu-env/bin/python examples/validate_device.py --device npu:0 --output runs/npu.json
 ```
 
 这里验证的是 PyTorch eager 小模型路径，**不是 DeepInfer 的 Ascend 950 厂商算子栈**。
+将上面的解释器路径替换为已有 NPU 环境的实际路径；在该环境中不要运行默认 CPU 配置的 `uv sync`。
 不要为运行这个教学项目升级共享机器的驱动或覆盖生产环境。详见 [昇腾适配说明](docs/ascend.md)。
 
 ## 测试与贡献
 
 ```bash
-ruff check .
-python -m pytest -q
-python examples/validate_device.py --device cpu
-python -m build
+uv run ruff check .
+uv run pytest -q
+uv run python examples/validate_device.py --device cpu
+uv build
 ```
 
 测试将分页/分块 logits 与无缓存全序列计算对齐，并覆盖因果性、请求隔离、共享前缀、

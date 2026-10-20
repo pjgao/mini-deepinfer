@@ -22,28 +22,30 @@ CUDA/NPU 支持状态必须在真实设备运行后更新。
 这句话出现在训练语料中，只证明小模型训练/保存/加载/生成链路工作，
 不属于泛化能力或正式模型精度结果。
 
-## 执行命令
+## 执行命令（uv 项目）
 
 ```bash
-ruff check .
-python -m pytest -q
-python examples/validate_device.py --device cpu --output runs/cpu-validation.json
-python examples/train_tiny.py --steps 160 --output checkpoints/tiny
-mini-deepinfer --checkpoint checkpoints/tiny --prompt "A KV cache" --max-tokens 40 --draft-tokens 3
-python examples/benchmark.py --checkpoint checkpoints/tiny --output runs/baseline.json
-python examples/benchmark.py --checkpoint checkpoints/tiny --draft-tokens 3 --output runs/spec.json
-python -m build --installer uv
+uv sync --locked
+uv run ruff check .
+uv run pytest -q
+uv run python examples/validate_device.py --device cpu --output runs/cpu-validation.json
+uv run python examples/train_tiny.py --steps 160 --output checkpoints/tiny
+uv run mini-deepinfer --checkpoint checkpoints/tiny --prompt "A KV cache" --max-tokens 40 --draft-tokens 3
+uv run python examples/benchmark.py --checkpoint checkpoints/tiny --output runs/baseline.json
+uv run python examples/benchmark.py --checkpoint checkpoints/tiny --draft-tokens 3 --output runs/spec.json
+uv build
 ```
 
-本地 WSL 缺少系统 `ensurepip`，因此构建隔离环境使用 uv installer；
-这是验证环境差异。常规具备 venv/pip 的环境与 GitHub CI 使用 `python -m build`。
+项目使用 `uv.lock` 固定依赖，默认 Python 由 `.python-version` 选择。
+构建统一使用 `uv build`，无需额外安装 Python build 包或系统 ensurepip。
 
 一次 CPU benchmark 冒烟运行中，有/无草稿均实际发出 256 token。
 草稿配置提出 390 个 token、接受 40 个；这些是计数验证。
 单轮耗时只有约 0.16–0.17 秒，**不足以建立性能收益结论**，因此不作为加速比宣传。
 正式性能实验需要更长测量窗口、多轮交替运行与环境记录。
 
-GitHub Actions 运行 Python 3.10 / PyTorch 2.5.1 和 Python 3.12 / 可用最新 CPU PyTorch 两组检查。
+GitHub Actions 在 Python 3.10 / 3.12 上执行 `uv sync --locked` 和锁定环境检查；
+Python 3.10 另行覆盖 PyTorch 2.5.1 的兼容性测试，不改动锁文件。
 请以 [当前 workflow 结果](https://github.com/pjgao/mini-deepinfer/actions/workflows/ci.yml) 为准；
 本地通过不意味着远程 CI 已通过。
 

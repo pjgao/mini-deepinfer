@@ -20,11 +20,13 @@
 已有可用 NPU 环境内：
 
 ```bash
-python -m pip install -e . --no-deps
-ASCEND_RT_VISIBLE_DEVICES=0 python examples/validate_device.py \
+uv pip install --python /path/to/npu-env/bin/python -e . --no-deps
+ASCEND_RT_VISIBLE_DEVICES=0 /path/to/npu-env/bin/python examples/validate_device.py \
   --device npu:0 --output runs/npu-validation.json
 ```
 
+替换解释器路径为现有 NPU 环境的实际路径。这里使用 uv 的 pip 接口，只安装项目本身；
+不要在厂商环境中执行 `uv sync` 或普通 `uv run`，它们会同步默认 CPU 锁文件。
 可见设备列表应由当前机器分配决定。`npu:0` 是可见列表里的逻辑编号。
 `validate_device.py` 只分配一个很小的 float32 模型和页缓存，不下载权重、不启动服务、
 不修改驱动，也不清理其他进程。失败时会保留异常并返回非零状态，不会静默回退 CPU。
