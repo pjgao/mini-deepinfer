@@ -1,0 +1,15 @@
+mini-deepinfer
+Copyright 2026 pjgao
+
+An independently written educational implementation inspired by:
+
+DeepInfer — https://github.com/deepseek-ai/DeepInfer (Apache-2.0)
+nano-vllm — https://github.com/GeeeekExplorer/nano-vllm (MIT)
+mini-sglang — https://github.com/sgl-project/mini-sglang (MIT)
+
+Reference revisions are recorded in provenance.json.
+No upstream runtime or device kernel source is vendored in this repository.
+The Apache-2.0 license text is reproduced verbatim in LICENSE.
+
+This project is not affiliated with or endorsed by DeepSeek, NVIDIA, Huawei,
+vLLM, or SGLang. Model names are used only to identify design references.

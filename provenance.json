@@ -1,0 +1,27 @@
+{
+  "project": "mini-deepinfer",
+  "created": "2026-10-21",
+  "implementation": "Independently written educational PyTorch reference; no upstream runtime code vendored",
+  "references": [
+    {
+      "repository": "https://github.com/deepseek-ai/DeepInfer",
+      "revision": "d585e6542c0571176272d703f03c4807ae901284",
+      "role": "Model, cache, scheduler and speculative verification design"
+    },
+    {
+      "repository": "https://github.com/GeeeekExplorer/nano-vllm",
+      "revision": "bb823b3e06983d71485a8e1f23715ebd87d98ef8",
+      "role": "Small readable engine organization"
+    },
+    {
+      "repository": "https://github.com/sgl-project/mini-sglang",
+      "revision": "9a91cfafe754aa85daee49998176275667eb58f2",
+      "role": "Educational serving mechanisms and module organization"
+    }
+  ],
+  "limitations": [
+    "No official DeepSeek-V4.1 checkpoint compatibility",
+    "No distributed execution, vendor kernels or production performance claim",
+    "Device entrypoints require explicit device validation"
+  ]
+}

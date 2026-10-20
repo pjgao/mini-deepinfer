@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mini-deepinfer"
+version = "0.1.0"
+description = "A readable, runnable DeepInfer-inspired inference engine for learning."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{name = "pjgao"}]
+dependencies = ["torch>=2.4"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "Programming Language :: Python :: 3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.8", "build"]
+
+[project.urls]
+Homepage = "https://github.com/pjgao/mini-deepinfer"
+Repository = "https://github.com/pjgao/mini-deepinfer"
+
+[project.scripts]
+mini-deepinfer = "mini_deepinfer.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mini_deepinfer*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

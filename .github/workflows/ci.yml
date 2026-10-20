@@ -1,0 +1,31 @@
+name: CPU correctness
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - python: "3.10"
+            torch-spec: "torch==2.5.1"
+          - python: "3.12"
+            torch-spec: "torch"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install "${{ matrix.torch-spec }}" --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e ".[dev]"
+      - run: ruff check .
+      - run: python -m pytest -q
+      - run: mini-deepinfer --max-tokens 4
+      - run: python examples/validate_device.py --device cpu
+      - run: python -m build
