@@ -5,6 +5,7 @@ distributed EP/TP and graph capture are deliberately left out of this reference.
 """
 
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 import torch
@@ -49,8 +50,19 @@ class Request:
     finish_reason: str | None = None
 
     @property
-    def generated(self):
+    def generated(self) -> list[int]:
         return self.tokens[len(self.prompt) :]
+
+    @property
+    def generated_count(self) -> int:
+        return len(self.tokens) - len(self.prompt)
+
+
+@dataclass
+class ScheduledRequest:
+    request: Request
+    tokens: list[int]
+    is_decode: bool
 
 
 class LLM:
@@ -68,7 +80,7 @@ class LLM:
         prefill_chunk: int = 32,
         prefix_cache: bool = True,
         draft_tokens: int = 0,
-    ):
+    ) -> None:
         if max_seqs <= 0 or token_budget < max_seqs or prefill_chunk <= 0 or draft_tokens < 0:
             raise ValueError("Require 0 < max_seqs <= token_budget, prefill_chunk > 0, draft_tokens >= 0")
         self.device = resolve_device(device)
@@ -84,8 +96,11 @@ class LLM:
         self.tokenizer = ByteTokenizer()
         self.pool = PagePool(num_pages, block_size, prefix_cache)
         self.cache = PagedKV(self.config, num_pages, block_size, self.device, next(model.parameters()).dtype)
-        self.max_seqs, self.token_budget, self.prefill_chunk = max_seqs, token_budget, prefill_chunk
-        self.draft_tokens, self.drafter = draft_tokens, NGramDraft()
+        self.max_seqs = max_seqs
+        self.token_budget = token_budget
+        self.prefill_chunk = prefill_chunk
+        self.draft_tokens = draft_tokens
+        self.drafter = NGramDraft()
         self.waiting: deque[Request] = deque()
         self.active: list[Request] = []
         self.requests: dict[str, Request] = {}
@@ -120,7 +135,7 @@ class LLM:
             self.waiting.append(req)
         return request_id
 
-    def _admit(self):
+    def _admit(self) -> None:
         while self.waiting and len(self.active) < self.max_seqs:
             req = self.waiting[0]
             lease = self.pool.acquire(req.prompt, len(req.prompt) + req.params.max_tokens)
@@ -131,17 +146,17 @@ class LLM:
             self.stats.prefix_hit_tokens += lease.cached_tokens
             self.active.append(req)
 
-    def _sample(self, logits, req):
+    def _sample(self, logits: torch.Tensor, req: Request) -> int:
         # CPU generator gives each request its own sampling stream on every backend.
         if req.params.temperature == 0:
             return int(logits.argmax().item())
         scores = logits.float().cpu() / req.params.temperature
         if req.params.top_k:
-            threshold = scores.topk(min(req.params.top_k, len(scores))).values[-1]
-            scores = scores.masked_fill(scores < threshold, -torch.inf)
+            values, indices = scores.topk(min(req.params.top_k, len(scores)))
+            scores = torch.full_like(scores, -torch.inf).scatter_(0, indices, values)
         return int(torch.multinomial(scores.softmax(-1), 1, generator=req.generator).item())
 
-    def _finish(self, req, reason):
+    def _finish(self, req: Request, reason: str) -> None:
         req.finish_reason = reason
         if req.lease is not None:
             self.pool.release(req.lease)
@@ -149,7 +164,7 @@ class LLM:
         if req in self.active:
             self.active.remove(req)
 
-    def _emit(self, req, tokens):
+    def _emit(self, req: Request, tokens: list[int]) -> int:
         count = 0
         for token in tokens:
             req.tokens.append(token)
@@ -158,7 +173,7 @@ class LLM:
             if token == req.params.eos_token_id:
                 self._finish(req, "eos")
                 break
-            if len(req.generated) >= req.params.max_tokens:
+            if req.generated_count >= req.params.max_tokens:
                 self._finish(req, "length")
                 break
         return count
@@ -167,46 +182,68 @@ class LLM:
     def step(self) -> list[Output]:
         if self.closed:
             raise RuntimeError("Engine is closed")
+        try:
+            return self._step()
+        except Exception:
+            # Planning, model execution and sampling all own live page leases.
+            self.close()
+            raise
+
+    def _schedule(self) -> list[ScheduledRequest]:
+        decode = [request for request in self.active if request.generated_count]
+        prefill = [request for request in self.active if not request.generated_count]
+        proposals = [
+            self.drafter.propose(
+                request.tokens,
+                min(self.draft_tokens, request.params.max_tokens - request.generated_count - 1),
+            )
+            if self.draft_tokens
+            else Draft([], [])
+            for request in decode
+        ]
+        counts = allocate_drafts(proposals, self.token_budget - len(decode))
+        plans = [
+            ScheduledRequest(request, [request.tokens[-1], *proposal.tokens[:count]], is_decode=True)
+            for request, proposal, count in zip(decode, proposals, counts, strict=True)
+        ]
+        remaining = self.token_budget - sum(len(plan.tokens) for plan in plans)
+        for request in prefill:
+            length = min(self.prefill_chunk, remaining, len(request.prompt) - request.computed)
+            if length:
+                tokens = request.prompt[request.computed : request.computed + length]
+                plans.append(ScheduledRequest(request, tokens, is_decode=False))
+                remaining -= length
+        return plans
+
+    def _step(self) -> list[Output]:
         self._admit()
         self.last_schedule = []
         if not self.active:
             return []
-        decode = [r for r in self.active if r.generated]
-        prefill = [r for r in self.active if not r.generated]
-        proposals = [
-            self.drafter.propose(r.tokens, min(self.draft_tokens, r.params.max_tokens - len(r.generated) - 1))
-            if self.draft_tokens
-            else Draft([], [])
-            for r in decode
-        ]
-        counts = allocate_drafts(proposals, self.token_budget - len(decode))
-        plans = [(r, [r.tokens[-1], *p.tokens[:n]], True) for r, p, n in zip(decode, proposals, counts)]
-        remaining = self.token_budget - sum(len(ids) for _, ids, _ in plans)
-        for req in prefill:
-            length = min(self.prefill_chunk, remaining, len(req.prompt) - req.computed)
-            if length:
-                plans.append((req, req.prompt[req.computed : req.computed + length], False))
-                remaining -= length
-        batches = [(ids, r.computed, r.lease.pages) for r, ids, _ in plans]
+        plans = self._schedule()
+        batches = []
+        for plan in plans:
+            request = plan.request
+            assert request.lease is not None
+            batches.append((plan.tokens, request.computed, request.lease.pages))
         self.last_schedule = [
             {
-                "request_id": r.request_id,
-                "phase": "decode" if decode else "prefill",
-                "start": r.computed,
-                "tokens": len(ids),
-                "drafts": len(ids) - 1 if decode else 0,
+                "request_id": plan.request.request_id,
+                "phase": "decode" if plan.is_decode else "prefill",
+                "start": plan.request.computed,
+                "tokens": len(plan.tokens),
+                "drafts": len(plan.tokens) - 1 if plan.is_decode else 0,
             }
-            for r, ids, decode in plans
+            for plan in plans
         ]
-        try:
-            results = self.model.forward_batch(batches, self.cache)
-        except Exception:
-            self.close()
-            raise
+        results = self.model.forward_batch(batches, self.cache)
+        if len(results) != len(plans):
+            raise ValueError("Model must return one logits tensor per scheduled request")
         self.stats.steps += 1
         updates = []
-        for (req, ids, is_decode), logits in zip(plans, results):
-            if is_decode:
+        for plan, logits in zip(plans, results, strict=True):
+            req, ids = plan.request, plan.tokens
+            if plan.is_decode:
                 self.stats.target_decode_tokens += len(ids)
                 self.stats.proposed_tokens += len(ids) - 1
                 if self.draft_tokens:
@@ -222,6 +259,7 @@ class LLM:
             else:
                 req.computed += len(ids)
                 self.stats.prefill_tokens += len(ids)
+                assert req.lease is not None
                 self.pool.remember(req.lease, req.prompt, req.computed)
                 if req.computed == len(req.prompt):
                     self._emit(req, [self._sample(logits[-1], req)])
@@ -230,16 +268,21 @@ class LLM:
         return updates
 
     @property
-    def has_pending(self):
+    def has_pending(self) -> bool:
         return bool(self.waiting or self.active)
 
     def output(self, request_id: str) -> Output:
-        r = self.requests[request_id]
+        request = self.requests[request_id]
+        generated = request.generated
         return Output(
-            r.request_id, r.prompt.copy(), r.generated, self.tokenizer.decode(r.generated), r.finish_reason
+            request_id=request.request_id,
+            prompt_token_ids=request.prompt.copy(),
+            token_ids=generated,
+            text=self.tokenizer.decode(generated),
+            finish_reason=request.finish_reason,
         )
 
-    def cancel(self, request_id: str):
+    def cancel(self, request_id: str) -> None:
         req = self.requests[request_id]
         if req.finish_reason is not None:
             return
@@ -247,23 +290,38 @@ class LLM:
             self.waiting.remove(req)
         self._finish(req, "cancelled")
 
-    def generate(self, prompts, params=None) -> list[Output]:
+    def generate(
+        self,
+        prompts: str | Iterable[str | list[int]],
+        params: SamplingParams | None = None,
+    ) -> list[Output]:
+        if self.closed:
+            raise RuntimeError("Engine is closed")
         if isinstance(prompts, str):
             prompts = [prompts]
-        ids = [self.add_request(p, params) for p in prompts]
+        ids = []
+        try:
+            for prompt in prompts:
+                ids.append(self.add_request(prompt, params))
+        except Exception:
+            for request_id in ids:
+                self.cancel(request_id)
+            raise
         while any(self.requests[i].finish_reason is None for i in ids):
             self.step()
         return [self.output(i) for i in ids]
 
-    def close(self):
-        for req in list(self.waiting) + list(self.active):
+    def close(self) -> None:
+        for req in [*self.waiting, *self.active]:
             self.cancel(req.request_id)
         self.pool.clear_prefixes()
         self.pool.check_invariants()
         self.closed = True
 
-    def __enter__(self):
+    def __enter__(self) -> "LLM":
+        if self.closed:
+            raise RuntimeError("Engine is closed")
         return self
 
-    def __exit__(self, *_):
+    def __exit__(self, *_) -> None:
         self.close()

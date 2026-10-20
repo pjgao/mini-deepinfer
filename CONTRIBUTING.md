@@ -4,7 +4,7 @@ Keep the engine readable and the scope honest.
 
 1. Read `docs/walkthrough.md` and the explicit simplifications in `docs/upstream-map.md`.
 2. Install uv, then run `uv sync --locked` for the reproducible CPU development environment.
-3. Run `uv run ruff check .`, `uv run pytest -q`, `uv build` and the relevant example.
+3. Run `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q`, `uv build` and the relevant example.
 4. For a new backend/kernel, keep a portable reference and test it against real outputs.
 5. Record the tested device and software versions. Do not infer NPU/CUDA support from CPU CI.
 

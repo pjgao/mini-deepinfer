@@ -1,0 +1,15 @@
+{
+  "theme": "base",
+  "fontFamily": "Microsoft YaHei, sans-serif",
+  "themeVariables": {
+    "fontSize": "20px"
+  },
+  "flowchart": {
+    "htmlLabels": false,
+    "curve": "linear",
+    "nodeSpacing": 40,
+    "rankSpacing": 35,
+    "wrappingWidth": 240
+  },
+  "htmlLabels": false
+}

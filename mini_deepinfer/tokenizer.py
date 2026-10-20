@@ -1,5 +1,5 @@
 class ByteTokenizer:
-    """Zero-download UTF-8 tokenizer, NOT the official DeepSeek tokenizer."""
+    """Encode UTF-8 bytes with three additional BOS, EOS and PAD token IDs."""
 
     bos_token_id = 256
     eos_token_id = 257

@@ -1,4 +1,4 @@
-"""Portable eager backend. No CUDA-to-NPU monkey-patching or custom kernels."""
+"""Device selection and synchronization for eager PyTorch execution."""
 
 import torch
 
@@ -17,7 +17,7 @@ def resolve_device(name: str) -> torch.device:
     return device
 
 
-def synchronize(device: torch.device):
+def synchronize(device: torch.device) -> None:
     if device.type == "cuda":
         torch.cuda.synchronize(device)
     elif device.type == "npu":

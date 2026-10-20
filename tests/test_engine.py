@@ -167,3 +167,65 @@ def test_forward_failure_cleans_resources(model, monkeypatch):
     with pytest.raises(RuntimeError, match="injected failure"):
         llm.step()
     assert llm.closed and all(n == 0 for n in llm.pool.refs)
+
+
+def test_top_k_limits_candidates_when_logits_are_tied(model):
+    with LLM(model) as llm:
+        request_id = llm.add_request([1], params(1, temperature=1, top_k=1))
+        request = llm.requests[request_id]
+        logits = torch.zeros(model.config.vocab_size)
+        expected = logits.topk(1).indices.item()
+        assert {llm._sample(logits, request) for _ in range(32)} == {expected}
+
+
+def test_sampling_failure_releases_requests_and_prefixes(model, monkeypatch):
+    llm = LLM(model, block_size=2)
+    llm.add_request([1, 2, 3, 4], params())
+
+    def fail(*_):
+        raise RuntimeError("sampling failed")
+
+    monkeypatch.setattr(llm, "_sample", fail)
+    with pytest.raises(RuntimeError, match="sampling failed"):
+        llm.step()
+    assert llm.closed
+    assert not llm.has_pending
+    assert not llm.pool.prefixes
+    assert all(count == 0 for count in llm.pool.refs)
+
+
+def test_drafter_failure_releases_active_requests(model, monkeypatch):
+    llm = LLM(model, draft_tokens=2)
+    llm.add_request([1, 2, 3], params())
+    llm.step()
+
+    def fail(*_):
+        raise RuntimeError("draft failed")
+
+    monkeypatch.setattr(llm.drafter, "propose", fail)
+    with pytest.raises(RuntimeError, match="draft failed"):
+        llm.step()
+    assert llm.closed and not llm.has_pending
+    assert all(count == 0 for count in llm.pool.refs)
+
+
+def test_incomplete_model_result_fails_instead_of_stalling(model, monkeypatch):
+    llm = LLM(model)
+    llm.add_request([1, 2], params())
+    monkeypatch.setattr(model, "forward_batch", lambda *_: [])
+    with pytest.raises(ValueError):
+        llm.step()
+    assert llm.closed and not llm.has_pending
+    assert all(count == 0 for count in llm.pool.refs)
+
+
+def test_invalid_generate_batch_cancels_only_its_new_requests(model):
+    with LLM(model) as llm:
+        existing = llm.add_request([7, 8], params(1))
+        with pytest.raises(ValueError, match="valid token IDs"):
+            llm.generate([[1, 2], []], params(2))
+        assert [request.request_id for request in llm.waiting] == [existing]
+        assert llm.output(existing).finish_reason is None
+        while llm.has_pending:
+            llm.step()
+        assert llm.output(existing).finish_reason == "length"

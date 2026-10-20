@@ -1,6 +1,6 @@
 """Greedy speculative verification and confidence-budgeted n-gram drafting.
 
-The drafter uses observed suffix frequencies, NOT DSpark's learned confidence head.
+The drafter estimates confidence from observed suffix frequencies.
 Target verification is exact for greedy decoding. Stochastic speculation would
 require rejection sampling and a residual distribution; it is intentionally absent.
 """
@@ -16,11 +16,13 @@ class Draft:
 
 
 class NGramDraft:
-    def __init__(self, max_order: int = 4):
+    def __init__(self, max_order: int = 4) -> None:
         self.max_order = max_order
 
     def propose(self, history: list[int], limit: int) -> Draft:
-        work, tokens, confidence = history.copy(), [], []
+        work = history.copy()
+        tokens = []
+        confidence = []
         for _ in range(limit):
             followers = Counter()
             for order in range(min(self.max_order, len(work)), 0, -1):

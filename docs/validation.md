@@ -1,11 +1,11 @@
-# 首版验证记录
+# 验证记录
 
 验证日期：2026-10-21。报告仅覆盖下面列出的环境和功能。
 
 | 项目 | 环境 / 方法 | 结果 |
 |---|---|---|
-| CPU 单元/集成测试 | WSL2 Ubuntu，Python 3.12.3，PyTorch 2.14.1+cpu，1 CPU thread | 38 tests passed |
-| 格式/静态检查 | Ruff | passed |
+| CPU 单元/集成测试 | WSL2 Ubuntu，Python 3.12.3，PyTorch 2.14.1+cpu，1 CPU thread | 54 tests passed |
+| 格式/静态检查 | Ruff lint（含 UP、B、SIM）与 format check | passed |
 | 设备验证脚本 | `validate_device.py --device cpu` | 全序列、分页/分块、多请求生成、前缀复用通过 |
 | 小模型训练 | seed=42，160 steps，仓库内合成语料，dense causal attention | loss 5.7958 → 0.1091 |
 | checkpoint 重新加载 | 本项目 `config.json + model.pt` | 可生成训练语句并正常 EOS |
@@ -17,6 +17,10 @@
 
 这里的“CPU 设备验证”是在相同 CPU 上对照不同执行路径，不是跨硬件对照。
 CUDA/NPU 支持状态必须在真实设备运行后更新。
+
+测试还覆盖同分值下的 Top-K 采样、草稿或采样异常后的缓存释放、批量提交失败时的请求取消、
+模型返回数量不匹配、空批次处理，以及配置中的非整数计数。模型计算重构后，
+CPU 对照脚本的最大 logits 误差为 0；160 步训练仍得到下述损失和续写结果。
 
 训练后输入 `A KV cache`，得到补全文本 ` stores previous keys and values.`，随后 EOS。
 这句话出现在训练语料中，只证明小模型训练/保存/加载/生成链路工作，

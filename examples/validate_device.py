@@ -18,7 +18,7 @@ from mini_deepinfer.backend import resolve_device, synchronize
 from mini_deepinfer.cache import PagedKV
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--output")

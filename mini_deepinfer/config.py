@@ -1,4 +1,12 @@
+import math
 from dataclasses import dataclass
+
+
+def _validate_count(name: str, value: int, minimum: int = 0) -> None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{name} must be an integer")
+    if value < minimum:
+        raise ValueError(f"{name} must be at least {minimum}")
 
 
 @dataclass(frozen=True)
@@ -18,7 +26,7 @@ class ModelConfig:
     sparse_topk: int = 8
     max_seq_len: int = 512
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         positive = (
             "vocab_size",
             "dim",
@@ -35,17 +43,15 @@ class ModelConfig:
             "max_seq_len",
         )
         for name in positive:
-            if getattr(self, name) <= 0:
-                raise ValueError(f"{name} must be positive")
+            _validate_count(name, getattr(self, name), minimum=1)
+        _validate_count("sparse_topk", self.sparse_topk)
         if self.rope_dim % 2:
             raise ValueError("rope_dim must be even")
         if self.experts_per_token > self.num_experts:
             raise ValueError("experts_per_token exceeds num_experts")
-        if self.sparse_topk < 0:
-            raise ValueError("sparse_topk must be nonnegative (0 = dense causal)")
 
     @property
-    def cache_width(self):
+    def cache_width(self) -> int:
         return self.kv_rank + self.rope_dim + self.index_dim
 
 
@@ -57,12 +63,8 @@ class SamplingParams:
     seed: int = 0
     eos_token_id: int | None = 257
 
-    def __post_init__(self):
-        import math
-
-        if self.max_tokens < 0:
-            raise ValueError("max_tokens must be nonnegative")
+    def __post_init__(self) -> None:
+        _validate_count("max_tokens", self.max_tokens)
+        _validate_count("top_k", self.top_k)
         if self.temperature < 0 or not math.isfinite(self.temperature):
             raise ValueError("temperature must be finite and nonnegative")
-        if self.top_k < 0:
-            raise ValueError("top_k must be nonnegative")

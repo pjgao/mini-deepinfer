@@ -74,6 +74,8 @@ with LLM(device="cpu", token_budget=32, prefill_chunk=16) as llm:
 
 ## 模型与执行流程
 
+![mini-deepinfer 模型结构：两层 pre-norm Transformer、压缩 KV 稀疏注意力和混合专家](docs/assets/model-architecture.png)
+
 默认模型有 2 层、64 维隐藏状态和 4 个注意力头。每层包含 4 个路由专家，
 每个 token 选择其中 2 个，另有一个共享专家。分词器按 UTF-8 字节编码，
 词表包含 256 个字节值和 BOS、EOS、PAD 三个特殊 token。
@@ -87,21 +89,11 @@ MoE 则将 token 分发给选中的专家，再合并专家输出。
 引擎先为请求预留输入与最大生成长度所需的缓存页，再安排预填充或解码。
 同一步内，不同请求的 token 会合并执行投影和 MoE，注意力计算按请求分别处理。
 生成遇到 EOS 或达到长度限制后，引擎结束请求并释放其页引用；可复用的完整前缀页继续保留。
+同一批次可以同时包含预填充和解码请求，下图中的完成判断分别针对每个请求。
 
-```mermaid
-flowchart LR
-    A[add_request] --> B[等待队列]
-    B --> C[容量准入 / 复用完整前缀页]
-    C --> D[调度一个 token budget]
-    D --> E[分块 prefill]
-    D --> F[decode + 可选草稿]
-    E --> G[合并投影 / 分请求 attention / 合并 MoE]
-    F --> G
-    G --> H[采样 / target 验证]
-    H --> I{EOS 或长度结束?}
-    I -->|否| D
-    I -->|是| J[释放请求页引用]
-```
+![请求调度流程：分块预填充、解码、草稿验证与缓存释放](docs/assets/scheduler.svg)
+
+[Mermaid 源文件](docs/assets/scheduler.mmd)
 
 [源码导读](docs/walkthrough.md) 介绍了具体的调度状态、缓存变化和阅读练习。
 [设计对照](docs/upstream-map.md) 列出了各模块参考的 DeepInfer 实现。

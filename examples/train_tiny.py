@@ -26,7 +26,7 @@ mini-deepinfer is a small engine for learning.
 """
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--steps", type=int, default=160)

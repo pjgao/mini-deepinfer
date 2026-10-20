@@ -13,7 +13,7 @@ from mini_deepinfer import LLM, MiniDeepSeek, SamplingParams
 from mini_deepinfer.backend import synchronize
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--checkpoint")

@@ -13,7 +13,7 @@ from mini_deepinfer.cache import PagedKV
 def test_cached_logits_match_full_sequence(model, chunk, sparse):
     model.config = replace(model.config, sparse_topk=sparse)
     for layer in model.layers:
-        layer.attn.c = model.config
+        layer.attn.config = model.config
     ids = torch.randint(0, 32, (19,))
     expected = model(ids)
     cache = PagedKV(model.config, 8, 4, "cpu", torch.float32)
@@ -52,3 +52,16 @@ def test_training_gradient_and_checkpoint_roundtrip(model, tmp_path):
     model.save(tmp_path)
     restored = MiniDeepSeek.load(tmp_path)
     torch.testing.assert_close(model(ids), restored(ids), atol=0, rtol=0)
+
+
+def test_empty_batch_returns_no_results(model):
+    cache = PagedKV(model.config, 8, 4, "cpu", torch.float32)
+    assert model.forward_batch([], cache) == []
+
+
+def test_empty_request_in_batch_is_rejected_before_cache_write(model):
+    cache = PagedKV(model.config, 8, 4, "cpu", torch.float32)
+    before = cache.data.clone()
+    with pytest.raises(ValueError, match="nonempty"):
+        model.forward_batch([([1, 2], 0, [1]), ([], 0, [2])], cache)
+    torch.testing.assert_close(cache.data, before, atol=0, rtol=0)

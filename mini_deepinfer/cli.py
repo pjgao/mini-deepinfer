@@ -9,7 +9,7 @@ from .engine import LLM
 from .model import MiniDeepSeek
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run the tiny educational engine (random weights by default)."
     )

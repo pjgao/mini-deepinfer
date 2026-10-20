@@ -1,0 +1,19 @@
+flowchart TD
+    Submit["提交请求"] --> Queue["等待队列"]
+    Queue --> Schedule["接纳请求并安排本步计算"]
+    Schedule --> Prefill["分块预填充"]
+    Schedule --> Decode["解码：待计算 token 与可选草稿"]
+    Prefill --> Forward["模型计算 / 更新 KV 缓存"]
+    Decode --> Forward
+    Forward --> Pending{"当前请求的预填充未完成？"}
+    Pending -->|是| Schedule
+    Pending -->|否| Emit["采样或验证草稿，输出 token"]
+    Emit --> Done{"EOS 或达到长度上限？"}
+    Done -->|否| Schedule
+    Done -->|是| Release["结束请求 / 释放页引用"]
+    Release -.->|仍有请求| Schedule
+    classDef operation fill:#eef4ff,stroke:#617ea5,color:#132b49;
+    classDef decision fill:#fff6df,stroke:#b58b37,color:#553c0d;
+    class Submit,Queue,Schedule,Prefill,Decode,Forward,Emit,Release operation;
+    class Pending,Done decision;
+

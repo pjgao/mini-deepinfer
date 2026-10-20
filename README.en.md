@@ -81,6 +81,8 @@ prefix hits, and proposed and accepted drafts.
 
 ## Model and execution
 
+![mini-deepinfer architecture: two pre-norm layers with latent attention and MoE](docs/assets/model-architecture.png)
+
 The default model has 2 layers, a hidden dimension of 64 and 4 attention heads.
 Each layer has 4 routed experts, selects 2 per token, and includes one shared
 expert. The tokenizer encodes UTF-8 bytes using a vocabulary of 256 byte values

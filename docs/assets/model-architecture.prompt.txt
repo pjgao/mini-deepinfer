@@ -1,0 +1,36 @@
+模板：Infographic Engine（信息图引擎），参考 case 334 / case 1 的浅色技术信息图。Use case: infographic-diagram。为 GitHub 项目 mini-deepinfer 生成一张准确、清晰、精致的模型结构图，用于中英文 README。白色背景，细深蓝线条，浅蓝注意力模块、浅紫 MoE 模块、淡青缓存说明、少量琥珀色 residual 加号；现代无衬线字，留白充足，不要海报营销风。横向 3:2 高分辨率 PNG。标题精确为“mini-deepinfer”，副标题精确为“Tiny PyTorch model architecture”。图内仅使用以下英文标签，短且清晰。
+
+布局：左侧 40% 是模型总览，右侧 60% 上下两个结构细节面板。所有连线方向清楚，不交叉文字。普通矩形表示操作或组件，不表示张量几何；不画任何张量立方体、矩阵网格、维度坐标轴或立体形状。数字只表示配置，不作为框的尺寸标签。
+
+左侧主图从上到下：
+“UTF-8 byte tokens” → “Embedding · d=64” → 一个带标题“Transformer layer ×2”的浅灰边框。
+框内只有两个上下相连的宽矩形。第一个浅蓝矩形写两行：“Attention residual” 和 “x = x + Attention(RMSNorm(x))”。
+第二个浅紫矩形写两行：“MoE residual” 和 “x = x + MoE(RMSNorm(x))”。
+这两个矩形依次更新 x，体现两次 pre-norm residual。使用公式表达残差，不画旁路、分叉点或残差加号圆点。
+框出口 → “Final RMSNorm” → “LM head” → “Logits · vocab=259”。
+Embedding 与 head 是操作框，不画权重矩阵。
+两个内部矩形用虚线指示线分别对应右侧 Latent attention、MoE 详情；虚线只表示展开说明。
+右上面板标题“Latent attention”：
+不要画繁杂完整算子图，只画紧凑的 4 步纵向操作框：
+“Project Q + latent KV + index keys”
+→ “Write / read paged KV cache”
+→ “Expand K/V · apply causal sparse mask”
+→ “Attention · output projection”
+面板下方使用无箭头的小字配置说明：
+“4 attention heads”
+“Old-token Top-8 ∪ recent window 8”
+“Cached per token, per layer: latent 16 + RoPE key 8 + index key 16”
+注意这四步是概念概要，Q 不写入缓存，cache 说明精确列出 latent、RoPE key、index key；不要把 Q 画进 cache。不要出现 flash attention、absorption、quantized cache或跨层共享等不存在模块。
+
+右下面板标题“MoE”：
+“Normalized input” 向左右两支分叉。
+左支：“Router · Top-2 of 4” → “Routed experts” → “Weighted sum”
+右支：“Shared expert”。
+左右两支汇入同一个圆形加号，出口标签“MoE output”。
+面板下方小字：“Expert: Linear → SiLU(gate) × up → Linear”。
+共享专家不经过 router，不是第5个被路由专家，必须从Normalized input直接分支。
+可用小型配置条：“2 layers · hidden 64 · max sequence 512”。不要额外标注性能数据或模型规模。
+
+页脚精确为“Educational architecture · custom mini checkpoints”。
+约束：这是此仓库实际的小模型，不是官方 DeepSeek V4.1 模型图。不得添加MTP、DSpark、distributed TP/EP、YOCO、FlashMLA等不存在内容。不得漏掉两次残差或最终RMSNorm。不得画Q缓存。文字全部拼写准确，大字号适合README缩放阅读，不要水印、logo、装饰图标、无关图案。
+张量几何负面约束：图中不要用几何块表示张量；如果不可避免出现任何带维度的张量轴，必须保持轴与数值准确对应、较大维度轴明显更长，禁止不等维度等长轴、禁止反转比例、禁止错误维度标签。
